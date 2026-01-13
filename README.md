@@ -137,10 +137,10 @@ sdk.ch_startScanning(
     timeout: 10
 ) { devices, error in
     if let error = error {
-        print("Scan error: \(error)")
+        debugPrint("Scan error: \(error)")
         return
     }
-    print("Scanned devices:", devices)
+    debugPrint("Scanned devices:", devices)
 }
 ```
 
@@ -173,7 +173,7 @@ This helps reduce battery consumption.
 
 ```swift
 sdk.ch_connect(toDevice: deviceId) { success, error in
-    print("Connect result:", success, error ?? "")
+    debugPrint("Connect result:", success, error ?? "")
 }
 ```
 
@@ -181,7 +181,7 @@ sdk.ch_connect(toDevice: deviceId) { success, error in
 
 ```swift
 sdk.ch_connect(toDevice: peripheral) { success, error in
-    print("Connect result:", success)
+    debugPrint("Connect result:", success)
 }
 ```
 
@@ -267,7 +267,7 @@ try await sdk.ch_batchDeleteFiles([
 let stream = try await sdk.ch_downloadDeviceFile(config: config)
 
 for try await event in stream {
-    print(event)
+    debugPrint(event)
 }
 ```
 
@@ -307,10 +307,10 @@ try await sdk.ch_formatDeviceStorage(type: 1)
 sdk.ch_uploadOTAFile(
     file: firmwareData,
     progress: { progress in
-        print("Progress:", progress)
+        debugPrint("Progress:", progress)
     },
     completion: { success, error in
-        print("OTA result:", success, error ?? "")
+        debugPrint("OTA result:", success, error ?? "")
     }
 )
 ```
@@ -329,11 +329,33 @@ try await sdk.ch_setDeviceRestart(bool: false)
 
 ---
 
-## 14. Notes & Best Practices
+## 14. Error
+
+- **errorCode**: Unique numeric code for SDK and higher-level communication  
+- **Case**: Swift enum case  
+- **Description**: Short description of the error  
+- **Reason**: Optional detailed cause for the error  
+
+| Error Code | Case | Description | Reason |
+|------------|------|-------------|--------|
+| 1001 | `deviceNotConnected` | Device is not connected. | Occurs when calling an API while the device is not connected (e.g., `queryBattery`, `operateRecord`) |
+| 2001 | `bluetooth` | CoreBluetooth system error | Underlying system Bluetooth error, may include an `NSError` object |
+| 2002 | `bluetoothRejected` | Device rejected the operation | Device returned a business-level failure. Example reasons: `"Empty device info response"`, `"Record operation failed"`, `"Change device name failed"`, `"Reset device failed"` |
+| 3001 | `fileIO` | File system operation failed | Local file operation failed, e.g., write or read failure |
+| 3002 | `invalidFileData` | Invalid file data | Downloaded data is invalid, CRC or offset mismatch. Reason example: `"File size mismatch"` |
+| 3003 | `downloadCancelled` | Download was cancelled | Download interrupted by user or system |
+| 9000 | `unknown` | Unknown error | Fallback for uncaught errors, may contain underlying `Error` |
+
+---
+
+
+---
+
+## 15. Notes & Best Practices
 
 * All async APIs must be called **after the device is connected**
 * Delegate callbacks are executed on background threads
 * Only one device connection is supported at a time
 * Do not disconnect during file transfer or OTA operations
-
+* WIFI-AP mode is handled by the upper-level business logic (SDK file downloads will automatically use the WiFi channel depending on whether the device is connected to WIFI-AP).
 ---
