@@ -311,21 +311,30 @@ Task {
 ### 3. Download Files
 
 ```swift
+
+// fileModel: File object on the device
+// saveTo: Save path, defaults to nil (temporary directory)
+// forceBle: Whether to force Bluetooth download. true: force Bluetooth download; false: prioritize WiFi download (requires WiFi AP enabled and device connected to LAN)
+let configure = CHDownloadConfigure(fileModel: file, saveTo: saveURL, forceBle: false)
+
 Task {
     do {
-        let stream = try await sdk.ch_downloadDeviceFile(config: .init(fileIndex: 0))
+        let stream = try await CHClarityRecSDKManager.shared
+        .ch_downloadDeviceFile(config: configure)
+    
         for try await event in stream {
             switch event {
-            case .progress(let progress):
-                print("Download progress:", progress)
-            case .completed(let filePath):
-                print("Download completed:", filePath)
-            case .failed(let error):
-                print("Download failed:", error)
+            case .progress(let value):
+                debugPrint("progress: \(Int(value * 100))%")
+            case .completed(let data):
+                debugPrint("Download data: \(data.count)")
+            @unknown default:
+                debugPrint("other error occurred")
+                break
             }
         }
     } catch {
-        print("Error downloading file:", error)
+        debugPrint("Error: \(error.localizedDescription)")
     }
 }
 ```
@@ -513,17 +522,27 @@ class RecorderSample {
             }
 
             // 8️⃣ Download file example (streaming)
-            if let firstFile = files.first {
-                let downloadStream = try await sdk.ch_downloadDeviceFile(config: .init(fileIndex: firstFile.index))
-                for try await event in downloadStream {
-                    switch event {
-                    case .progress(let progress):
-                        print("Download progress:", progress)
-                    case .completed(let filePath):
-                        print("Download completed:", filePath)
-                    case .failed(let error):
-                        print("Download failed:", error)
+            
+            let configure = CHDownloadConfigure(fileModel: file, saveTo: saveURL, forceBle: false)
+    
+            Task {
+                do {
+                    let stream = try await CHClarityRecSDKManager.shared
+                    .ch_downloadDeviceFile(config: configure)
+                
+                    for try await event in stream {
+                        switch event {
+                        case .progress(let value):
+                            debugPrint("progress: \(Int(value * 100))%")
+                        case .completed(let data):
+                            debugPrint("Download data: \(data.count)")
+                        @unknown default:
+                            debugPrint("other error occurred")
+                            break
+                        }
                     }
+                } catch {
+                    debugPrint("Error: \(error.localizedDescription)")
                 }
             }
 
