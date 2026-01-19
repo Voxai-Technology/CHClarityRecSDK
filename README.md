@@ -1,8 +1,9 @@
 # CHClarityRecSDK Usage Guide
 
 > This documentation applies to **CHClarityRecSDK** (supports **Swift Package Manager, SPM** integration only; CocoaPods is not currently supported).
->
-> ⚠️ **Internal network / Wi-Fi related capabilities (such as ch_connectInnerNet) are not covered in this documentation.**
+> `Access Wi-Fi Information` Used to obtain the Wi-Fi connection status and network information (e.g., SSID, BSSID) of the current device. This capability typically requires requesting the "Wireless Data" permission or relevant system declarations.
+> `Hotspot` Used to detect whether the personal hotspot (Wi-Fi hotspot) function is enabled on the current device, or to manage/connect to a personal hotspot. This capability generally involves Local Network permissions and specific configuration declarations.
+
 
 ---
 
@@ -311,30 +312,21 @@ Task {
 ### 3. Download Files
 
 ```swift
-
-// fileModel: File object on the device
-// saveTo: Save path, defaults to nil (temporary directory)
-// forceBle: Whether to force Bluetooth download. true: force Bluetooth download; false: prioritize WiFi download (requires WiFi AP enabled and device connected to LAN)
-let configure = CHDownloadConfigure(fileModel: file, saveTo: saveURL, forceBle: false)
-
 Task {
     do {
-        let stream = try await CHClarityRecSDKManager.shared
-        .ch_downloadDeviceFile(config: configure)
-    
+        let stream = try await sdk.ch_downloadDeviceFile(config: .init(fileIndex: 0))
         for try await event in stream {
             switch event {
-            case .progress(let value):
-                debugPrint("progress: \(Int(value * 100))%")
-            case .completed(let data):
-                debugPrint("Download data: \(data.count)")
-            @unknown default:
-                debugPrint("other error occurred")
-                break
+            case .progress(let progress):
+                print("Download progress:", progress)
+            case .completed(let filePath):
+                print("Download completed:", filePath)
+            case .failed(let error):
+                print("Download failed:", error)
             }
         }
     } catch {
-        debugPrint("Error: \(error.localizedDescription)")
+        print("Error downloading file:", error)
     }
 }
 ```
@@ -372,13 +364,42 @@ try await sdk.ch_formatDeviceStorage(type: 1)
 ## XII. OTA Firmware Upgrade
 
 ```swift
+
+// It is necessary to detect whether the current device has enabled the Wi-Fi hotspot function and call the `ch_connectInnerNet` method to connect to the device, or independently establish an internal network connection based on the data returned by the device. Afterward, execute the OTA upgrade process. Once the upgrade is complete, to avoid single-channel communication issues, it is advisable to disable the Wi-Fi channel.
+
+Task {
+    // 
+    let stream = try await sdk.ch_uploadOTAFile(
+        config: CHOTAConfigure(
+            data: Data(),
+            type: .wifiFirmware
+        )
+    )
+    for try await event in stream {
+        switch event {
+        case .progress(let progress):
+            print("progress: \(Int(progress * 100))%")
+        case .completed(let data):
+            print("✅ OTA upload, size: \(data.count) bytes")
+        @unknown default:
+            print("Error")
+        }
+    }
+}
 sdk.ch_uploadOTAFile(
-    file: firmwareData,
+    config: CHOTAConfigure(
+        data: Data(),
+        type: .wifiFirmware
+    ),
     progress: { progress in
-        debugPrint("progress:", progress)
+        print("progress: \(Int(progress * 100))%")
     },
     completion: { success, error in
-        debugPrint("OTA result:", success, error ?? "")
+        if success {
+            print("✅ OTA success")
+        } else {
+            print("❌ OTA fail: \(error?.localizedDescription ?? "")")
+        }
     }
 )
 ```
@@ -427,6 +448,8 @@ Task {
     do {
         // Turn on WIFI
         if let deviceInfo = try await sdk.ch_operateDeviceWifi(isOpen: true) {
+            // When the device WIFI-AP is enabled, connectInnerNet can be used to connect to the device LAN, 
+            try await CHClarityRecSDKManager.shared.ch_connectInnerNet()
             print("WIFI enabled, device info:", deviceInfo.toJSON() ?? [:])
         }
 
@@ -442,7 +465,44 @@ Task {
 
 ---
 
-## XVI. Complete Example
+## XVI. Exit Wi-Fi AP mode
+
+```swift
+Task {
+    do {
+        // exit on WIFI-AP
+        try await sdk.ch_exitWIFIMode() 
+        print("Exit WIFI-AP success.")
+    
+    } catch {
+        print("Exit WIFI-AP error:", error)
+    }
+}
+```
+
+
+---
+
+
+## XVII. Set USB Mode
+
+```swift
+Task {
+    do {
+        // Enable USB mode
+        try await sdk.ch_setDeviceUSBMode(isOpen: true)
+        // Disable USB mode
+        try await sdk.ch_setDeviceUSBMode(isOpen: false)
+        print("USB mode enabled successfully.")
+    } catch {
+        print("Failed to set USB mode:", error)
+    }
+}
+```
+
+---
+
+## XVIII. Complete Example
 
 ```swift
 import CHClarityRecSDK
@@ -518,26 +578,33 @@ class RecorderSample {
             // calling `ch_downloadDeviceFile` will automatically use the WiFi channel to download files, 
             // otherwise it will default to using the Bluetooth channel.
             if let deviceInfo = try await sdk.ch_operateDeviceWifi(isOpen: true) {
+                // When the device WIFI-AP is enabled, connectInnerNet can be used to connect to the device LAN, 
+                try await CHClarityRecSDKManager.shared.ch_connectInnerNet()
                 print("WIFI enabled, device info:", deviceInfo.toJSON() ?? [:])
             }
 
             // 8️⃣ Download file example (streaming)
-            
+            guard let file = files.first else {
+                return
+            }
+            let documentsURL = FileManager.default.urls(for: .documentDirectory,
+                                                        in: .userDomainMask).first!
+            let saveURL = documentsURL.appendingPathComponent(file.name ?? "def.ogg")
             let configure = CHDownloadConfigure(fileModel: file, saveTo: saveURL, forceBle: false)
-    
+
             Task {
                 do {
                     let stream = try await CHClarityRecSDKManager.shared
-                    .ch_downloadDeviceFile(config: configure)
-                
+                        .ch_downloadDeviceFile(config: configure)
+                    
                     for try await event in stream {
                         switch event {
                         case .progress(let value):
                             debugPrint("progress: \(Int(value * 100))%")
                         case .completed(let data):
-                            debugPrint("Download data: \(data.count)")
+                            debugPrint("completed data size: \(data.count)")
                         @unknown default:
-                            debugPrint("other error occurred")
+                            debugPrint("other error")
                             break
                         }
                     }
@@ -557,17 +624,42 @@ class RecorderSample {
             print("Device renamed")
 
             // 1️⃣1️⃣ OTA upgrade example
-            let firmwareData = Data() // Fill in actual firmware
+
+            // 1️⃣2️⃣ OTA upgrade example
+            Task {
+                let stream = try await sdk.ch_uploadOTAFile(
+                    config: CHOTAConfigure(
+                        data: Data(),
+                        type: .wifiFirmware
+                    )
+                )
+                for try await event in stream {
+                    switch event {
+                    case .progress(let progress):
+                        print("progress: \(Int(progress * 100))%")
+                    case .completed(let data):
+                        print("✅ OTA upload, size: \(data.count) bytes")
+                    @unknown default:
+                        print("Error")
+                    }
+                }
+            }
             sdk.ch_uploadOTAFile(
-                file: firmwareData,
+                config: CHOTAConfigure(
+                    data: Data(),
+                    type: .wifiFirmware
+                ),
                 progress: { progress in
-                    print("OTA progress:", progress)
+                    print("progress: \(Int(progress * 100))%")
                 },
                 completion: { success, error in
-                    print("OTA completed:", success, "Error:", error ?? "")
+                    if success {
+                        print("✅ OTA success")
+                    } else {
+                        print("❌ OTA fail: \(error?.localizedDescription ?? "")")
+                    }
                 }
             )
-
         } catch {
             print("Error occurred:", error)
         }
@@ -584,7 +676,7 @@ Task {
 
 ---
 
-## XVII. Error Codes
+## XIX. Error Codes
 
 - **errorCode**: Unique identifier for SDK and upper layer communication  
 - **Case**: Swift enum name  
@@ -593,17 +685,41 @@ Task {
 
 | Error Code | Case | Description | Reason |
 |------------|------|-------------|--------|
-| 1001 | `deviceNotConnected` | Device is not connected. | Called interface when device is not connected (e.g., queryBattery, operateRecord, etc.) |
-| 2001 | `bluetooth` | CoreBluetooth system error | Underlying Bluetooth system exception, may contain `NSError` object |
-| 2002 | `bluetoothRejected` | Device rejected the operation | Device returned business failure, may contain specific reason (`reason`) such as `"Empty device info response"`, `"Record operation failed"`, `"Change device name failed"`, `"Reset device failed"`, etc. |
-| 3001 | `fileIO` | File system operation failed | Local file operation failed, such as write/read failure |
-| 3002 | `invalidFileData` | Invalid file data | Downloaded data is invalid / CRC / offset error, may carry reason such as `"File size mismatch"` |
-| 3003 | `downloadCancelled` | Download was cancelled | User or system actively interrupted download |
-| 9000 | `unknown` | Unknown error occurred | Fallback error, may contain underlying exception (`Error`) |
+| 1001 | `deviceNotConnected` | Device is not connected | API called while the device is not connected (e.g. queryBattery, operateRecord, etc.) |
+| 1002 | `bluetooth` | CoreBluetooth system error | Underlying CoreBluetooth exception, may contain `NSError` |
+| 1003 | `bluetoothRejected` | Device rejected the operation | Device-side protocol or business logic rejection, see `CHClarityRecErrorCode` |
+| 1004 | `emptyDeviceInfo` | Device info response is empty | Device returned empty or invalid device info data |
+| 1005 | `emptyStorageResponse` | Storage info response is empty | Failed to retrieve storage information from device |
+| 1006 | `recordOperationFailed` | Recording operation failed | Device failed to start / stop recording |
+| 1007 | `emptyBatteryResponse` | Battery info response is empty | Device returned empty battery data |
+| 1008 | `noDeviceResponse` | No device response | Device did not respond to the request |
+| 1009 | `resetDeviceFailed` | Device reset failed | Device failed to perform reset operation |
+| 1010 | `bindDeviceFailed` | Device bind failed | Failed to bind the device |
+| 1011 | `downloadCancelled` | Download cancelled | Download was cancelled by user or system |
+| 1012 | `fileTransferFailed` | File transfer failed | Device file transfer process failed |
+| 1013 | `wifiUnavailable` | Wi-Fi unavailable | Wi-Fi is disabled or not reachable |
+| 1014 | `socketConnectFailed` | Socket connection failed | Failed to establish socket connection |
+| 1015 | `emptyFindDeviceResponse` | Find device response is empty | Device did not respond to find-device command |
+| 1016 | `editNameFailed` | Edit device name failed | Failed to change device name |
+| 1017 | `resertFailed` | Device reset failed | Device rejected reset command |
+| 1018 | `shutdownFailed` | Device shutdown failed | Device failed to shut down |
+| 1019 | `responseFrameError` | Protocol frame error | Protocol data frame incomplete or invalid |
+| 1020 | `timeout` | Operation timed out | No response within timeout period |
+| 1021 | `characteristicNotFound` | Characteristic not found | Required BLE characteristic missing |
+| 1022 | `servicesNotFound` | Service not found | Required BLE service missing |
+| 1023 | `retryLimitExceeded` | Retry limit exceeded | Maximum retry attempts reached |
+| 1024 | `disconnectBluetooth` | Bluetooth disconnected | Bluetooth connection was unexpectedly disconnected |
+| 1025 | `setUSBModeFailed` | Set USB mode failed | Device failed to enter USB mode |
+| 1026 | `socketNotConnect` | Socket not connected | Socket is not connected or already closed |
+| 2001 | `fileIO` | File system operation failed | Local file read/write failure |
+| 2003 | `downloadCancelled` | Download interrupted | Download interrupted at SDK level |
+| 3001 | `clearWriteQueue` | Clear write queue | Internal write buffer queue cleared |
+| 4001 | `wifiRejected` | Wi-Fi operation rejected | Wi-Fi operation rejected by device or network |
+| 9000 | `unknown` | Unknown error | Fallback error, may contain underlying exception |
 
 ---
 
-## XVIII. Important Notes
+## XX. Important Notes
 
 * All async interfaces **must be called when the device is connected**
 * Bluetooth callback thread is a background thread
