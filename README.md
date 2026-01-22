@@ -364,7 +364,7 @@ try await sdk.ch_formatDeviceStorage(type: 1)
 ## XII. OTA Firmware Upgrade
 
 ```swift
-
+(discard ❌)
 // It is necessary to detect whether the current device has enabled the Wi-Fi hotspot function and call the `ch_connectInnerNet` method to connect to the device, or independently establish an internal network connection based on the data returned by the device. Afterward, execute the OTA upgrade process. Once the upgrade is complete, to avoid single-channel communication issues, it is advisable to disable the Wi-Fi channel.
 
 Task {
@@ -409,6 +409,8 @@ sdk.ch_uploadOTAFile(
 ## XIII. Device Restart / Power Off
 
 ```swift
+
+(discard ❌)
 Task {
     do {
         try await sdk.ch_setDeviceRestart(bool: true)  // Restart
@@ -623,9 +625,7 @@ class RecorderSample {
             try await sdk.ch_changeDeviceName("MyRecorder")
             print("Device renamed")
 
-            // 1️⃣1️⃣ OTA upgrade example
-
-            // 1️⃣2️⃣ OTA upgrade example
+            // 1️⃣1️⃣ OTA upgrade example (discard ❌)
             Task {
                 let stream = try await sdk.ch_uploadOTAFile(
                     config: CHOTAConfigure(
