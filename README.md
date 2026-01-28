@@ -320,7 +320,9 @@ Task {
             case .progress(let progress):
                 print("Download progress:", progress)
             case .completed(let filePath):
-                print("Download completed:", filePath)
+                if data is URL, let url = data as? URL {
+                    debugPrint("completed url: \(url.path)")
+                }
             case .failed(let error):
                 print("Download failed:", error)
             }
@@ -604,7 +606,9 @@ class RecorderSample {
                         case .progress(let value):
                             debugPrint("progress: \(Int(value * 100))%")
                         case .completed(let data):
-                            debugPrint("completed data size: \(data.count)")
+                            if data is URL, let url = data as? URL {
+                                debugPrint("completed url: \(url.path)")
+                            }
                         @unknown default:
                             debugPrint("other error")
                             break
