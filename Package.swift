@@ -10,8 +10,8 @@ let package = Package(
     targets: [
         .binaryTarget(
             name: "CHClarityRecSDK",
-            url: "https://github.com/Voxai-Technology/CHClarityRecSDK/releases/download/0.0.19/CHClarityRecSDK.xcframework.zip",
-            checksum: "2bc203a2e66919d9d1911b5b15a1c55ebce9172921f463a5e0b330bafdf8852b"
+            url: "https://github.com/Voxai-Technology/CHClarityRecSDK/releases/download/0.0.20/CHClarityRecSDK.xcframework.zip",
+            checksum: "cb02965878c7e8b49894c0af0d3459725ef4e35218e35aa0ab213966c81a3dfd"
         )
     ]
 )
